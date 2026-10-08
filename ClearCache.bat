@@ -1,18 +1,14 @@
-# ClearCache.ps1
-# Interactive cache cleanup for IT use on end-user laptops.
-# Must be run as Administrator:
-#   powershell -ExecutionPolicy Bypass -File .\ClearCache.ps1
-# The -ExecutionPolicy Bypass part is required when scripts are blocked by policy,
-# or just use ClearCache.bat instead.
-
-# --- Require Administrator; if not, tell the user and exit ----------------
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Host "This script must be run as Administrator." -ForegroundColor Red
-    Write-Host "Open PowerShell as Administrator (right-click > Run as administrator) and run it again." -ForegroundColor Yellow
-    exit 1
-}
-
-# --- Cache targets: N=name, Procs=apps to close first, Paths=folders to clear ---
+@echo off
+REM ClearCache.bat - single-file interactive cache cleanup. Right-click > Run as administrator (or just double-click).
+fltmc >nul 2>&1 || (echo Requesting administrator privileges... & powershell -NoProfile -Command "Start-Process '%~f0' -Verb RunAs" & exit /b)
+set "P=%TEMP%\CC_%RANDOM%.ps1"
+powershell -NoProfile -Command "$m='::PS_'+'PAYLOAD_BEGIN';$l=@(Get-Content -LiteralPath '%~f0');$i=[array]::IndexOf($l,$m);if($i-lt 0){exit 2};$l[($i+1)..($l.Count-1)]|Set-Content -LiteralPath '%P%' -Encoding UTF8"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%P%"
+del "%P%" 2>nul
+pause
+exit /b 0
+::PS_PAYLOAD_BEGIN
+# N=name, Procs=apps to close first, Paths=folders to clear
 $targets = @(
     @{ N="User Temp";           Procs=@();                    Paths=@("$env:TEMP\*") }
     @{ N="Windows Temp";        Procs=@();                    Paths=@("C:\Windows\Temp\*") }
@@ -25,7 +21,6 @@ $targets = @(
 # Prefetch:    @{ N="Prefetch"; Procs=@(); Paths=@("C:\Windows\Prefetch\*") }
 # Recycle Bin: Clear-RecycleBin -Force -ErrorAction SilentlyContinue
 
-# --- Clear one target and report the result -------------------------------
 function Clear-Target($t) {
     Write-Host "Clearing $($t.N)..." -ForegroundColor Yellow
     $existed = $false; $hadItems = $false; $locked = 0
@@ -45,7 +40,6 @@ function Clear-Target($t) {
     else                    { Write-Host "   cleared successfully" -ForegroundColor Green }
 }
 
-# --- Interactive selection ------------------------------------------------
 while ($true) {
     Write-Host "`nSelect what to clear:" -ForegroundColor Cyan
     for ($i=0; $i -lt $targets.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i+1), $targets[$i].N) }
@@ -60,7 +54,6 @@ $chosen = @($targets[$($sel | Select-Object -Unique)])
 Write-Host "`nSelected: $(($chosen.N) -join ', ')" -ForegroundColor Cyan
 if ((Read-Host "Proceed? (Y/N)") -notmatch '^y') { Write-Host "Aborted." -ForegroundColor Red; exit }
 
-# --- Close related apps first ---------------------------------------------
 $procs = @($chosen.Procs | Sort-Object -Unique)
 foreach ($p in $procs) {
     if (Get-Process $p -ErrorAction SilentlyContinue) {
@@ -79,12 +72,9 @@ while (-not $skip -and ($run = @($procs | Where-Object { Get-Process $_ -ErrorAc
     }
 }
 
-# --- Clear the selected caches --------------------------------------------
 Write-Host "`nStarting cache cleanup..." -ForegroundColor Cyan
 foreach ($t in $chosen) { Clear-Target $t }
 Write-Host "Cache cleanup completed." -ForegroundColor Cyan
 
-# --- Interactive restart prompt -------------------------------------------
 do { $r = (Read-Host "`nRestart now? (Y/N)").Trim().ToLower() } until ($r -in "y","yes","n","no")
-if ($r[0] -eq "y") { Write-Host "Restarting..." -ForegroundColor Yellow; Restart-Computer -Force }
-else { Write-Host "Restart skipped." -ForegroundColor Gray }
+if ($r[0] -eq "y") { Restart-Computer -Force } else { Write-Host "Restart skipped." -ForegroundColor Gray }

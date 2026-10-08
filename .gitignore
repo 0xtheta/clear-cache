@@ -1,0 +1,13 @@
+# Local documentation / notes (kept out of the repo)
+ClearCache.md
+
+# Transient dev/test artifacts
+check.ps1
+make-test.ps1
+extract-test.ps1
+tptest.ps1
+ctfix-test.ps1
+payload-check.ps1
+ClearCache-test.bat
+CC_*.ps1
+*.tmp
